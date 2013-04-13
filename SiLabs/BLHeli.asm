@@ -289,7 +289,7 @@ RCTimer_6A_Multi 			EQU 87
 
 ;**** **** **** **** ****
 ; Select the ESC and mode to use (or unselect all for use with external batch compile file)
-;BESC EQU XP_3A_Main
+BESC EQU XP_3A_Main
 ;BESC EQU XP_3A_Tail
 ;BESC EQU XP_3A_Multi
 ;BESC EQU XP_7A_Main 
@@ -1875,6 +1875,7 @@ IF MODE == 2	; Multi
 ENDIF
 
 t2_int_pwm_exit:	
+mov Current_Pwm_Limited, #0FFh ; New line added
 	; Check if high byte flag is set
 	jb	TF2H, t2h_int		
 	pop	ACC			; Restore preserved registers
@@ -5011,21 +5012,23 @@ clear_ram:
 	mov	TMR3CN, #04h		; Timer3 enabled
 	; PCA
 	mov	PCA0CN, #40h		; PCA enabled
-	; Initializing beep
-	call wait200ms	
-	call beep_f1
-	call wait30ms
-	call beep_f2
-	call wait30ms
-	call beep_f3
-	call wait30ms
-
-	; Wait for receiver to initialize
-	call	wait1s
-	call	wait200ms
-	call	wait200ms
-	call	wait100ms
-
+	
+; HUGO : Skip beep !
+;	; Initializing beep
+;	call wait200ms	
+;	call beep_f1
+;	call wait30ms
+;	call beep_f2
+;	call wait30ms
+;	call beep_f3
+;	call wait30ms
+;
+;	; Wait for receiver to initialize
+;	call	wait1s
+;	call	wait200ms
+;	call	wait200ms
+;	call	wait100ms
+	
 	; Enable interrupts
 	mov	IE, #22h			; Enable timer0 and timer2 interrupts
 	mov	IP, #02h			; High priority to timer0 interrupts
@@ -5054,60 +5057,75 @@ ENDIF
 
 	; Measure PWM frequency
 measure_pwm_freq_init:	
-	setb	Flags0.RCP_MEAS_PWM_FREQ 		; Set measure pwm frequency flag
-measure_pwm_freq_start:	
-	mov	Temp3, #5						; Number of pulses to measure
-measure_pwm_freq_loop:	
-	; Check if period diff was accepted
-	mov	A, Rcp_Period_Diff_Accepted
-	jnz	($+4)
 
-	mov	Temp3, #5						; Reset number of pulses to measure
-
-	call wait3ms						; Wait for next pulse (NB: Uses Temp1/2!) 
-	mov	A, New_Rcp					; Load value
-	clr	C
-	subb	A, #RCP_VALIDATE				; Higher than validate level?
-	jc	measure_pwm_freq_start			; No - start over
-
-	mov	A, Flags3						; Check pwm frequency flags
-	anl	A, #((1 SHL RCP_PWM_FREQ_1KHZ)+(1 SHL RCP_PWM_FREQ_2KHZ)+(1 SHL RCP_PWM_FREQ_4KHZ)+(1 SHL RCP_PWM_FREQ_8KHZ))
-	mov	Prev_Rcp_Pwm_Freq, Curr_Rcp_Pwm_Freq		; Store as previous flags for next pulse 
-	mov	Curr_Rcp_Pwm_Freq, A					; Store current flags for next pulse 
-	cjne	A, Prev_Rcp_Pwm_Freq, measure_pwm_freq_start	; Go back if new flags not same as previous
-
-	djnz	Temp3, measure_pwm_freq_loop				; Go back if not required number of pulses seen
-
+	; BEGIN HUGO
+	mov Prev_Rcp_Pwm_Freq, #RCP_VALIDATE
+	mov	Curr_Rcp_Pwm_Freq, #RCP_VALIDATE
+	
 	; Clear measure pwm frequency flag
-	clr	Flags0.RCP_MEAS_PWM_FREQ 		
-	; Set up RC pulse interrupts after pwm frequency measurement
+	clr	Flags0.RCP_MEAS_PWM_FREQ 
 	Rcp_Int_First 						; Enable interrupt and set to first edge
 	Rcp_Clear_Int_Flag 					; Clear interrupt flag
-	clr	Flags2.RCP_EDGE_NO				; Set first edge flag
-	call wait100ms						; Wait for new RC pulse
+	; END HUGO
 
-	; Validate RC pulse
-validate_rcp_start:	
-	call wait3ms						; Wait for next pulse (NB: Uses Temp1/2!) 
-	mov	Temp1, #RCP_VALIDATE			; Set validate level as default
-	mov	A, #((1 SHL RCP_PWM_FREQ_1KHZ)+(1 SHL RCP_PWM_FREQ_2KHZ)+(1 SHL RCP_PWM_FREQ_4KHZ)+(1 SHL RCP_PWM_FREQ_8KHZ))
-	anl	A, Flags3						; Check pwm frequency flags
-	jnz	($+4)						; If a flag is set (PWM) - branch
+; HUGO : Skip pwm measure
+;	setb	Flags0.RCP_MEAS_PWM_FREQ 		; Set measure pwm frequency flag
+;measure_pwm_freq_start:	
+;	mov	Temp3, #5						; Number of pulses to measure
+;measure_pwm_freq_loop:	
+;	; Check if period diff was accepted
+;	mov	A, Rcp_Period_Diff_Accepted
+;	jnz	($+4)
+;
+;	mov	Temp3, #5						; Reset number of pulses to measure
+;
+;	call wait3ms						; Wait for next pulse (NB: Uses Temp1/2!) 
+;	mov	A, New_Rcp					; Load value
+;	clr	C
+;	subb	A, #RCP_VALIDATE				; Higher than validate level?
+;	jc	measure_pwm_freq_start			; No - start over
+;
+;	mov	A, Flags3						; Check pwm frequency flags
+;	anl	A, #((1 SHL RCP_PWM_FREQ_1KHZ)+(1 SHL RCP_PWM_FREQ_2KHZ)+(1 SHL RCP_PWM_FREQ_4KHZ)+(1 SHL RCP_PWM_FREQ_8KHZ))
+;	mov	Prev_Rcp_Pwm_Freq, Curr_Rcp_Pwm_Freq		; Store as previous flags for next pulse 
+;	mov	Curr_Rcp_Pwm_Freq, A					; Store current flags for next pulse 
+;	cjne	A, Prev_Rcp_Pwm_Freq, measure_pwm_freq_start	; Go back if new flags not same as previous
+;
+;	djnz	Temp3, measure_pwm_freq_loop				; Go back if not required number of pulses seen
+;
+;	; Clear measure pwm frequency flag
+;	clr	Flags0.RCP_MEAS_PWM_FREQ 		
+;	; Set up RC pulse interrupts after pwm frequency measurement
+;	Rcp_Int_First 						; Enable interrupt and set to first edge
+;	Rcp_Clear_Int_Flag 					; Clear interrupt flag
+;	clr	Flags2.RCP_EDGE_NO				; Set first edge flag
+;	call wait100ms						; Wait for new RC pulse
 
-	mov	Temp1, #0						; Set level to zero for PPM (any level will be accepted)
+;	; Validate RC pulse
+validate_rcp_start:
 
-	clr	C
-	mov	A, New_Rcp					; Load value
-	subb	A, Temp1						; Higher than validate level?
-	jc	validate_rcp_start				; No - start over
+; HUGO
+;	call wait3ms						; Wait for next pulse (NB: Uses Temp1/2!) 
+;	mov	Temp1, #RCP_VALIDATE			; Set validate level as default
+;	mov	A, #((1 SHL RCP_PWM_FREQ_1KHZ)+(1 SHL RCP_PWM_FREQ_2KHZ)+(1 SHL RCP_PWM_FREQ_4KHZ)+(1 SHL RCP_PWM_FREQ_8KHZ))
+;	anl	A, Flags3						; Check pwm frequency flags
+;	jnz	($+4)						; If a flag is set (PWM) - branch
+;
+;	mov	Temp1, #0						; Set level to zero for PPM (any level will be accepted)
+;
+;	clr	C
+;	mov	A, New_Rcp					; Load value
+;	subb	A, Temp1						; Higher than validate level?
+;	jc	validate_rcp_start				; No - start over
 
-	; Beep arm sequence start signal
-	clr 	EA							; Disable all interrupts
-	call beep_f1						; Signal that RC pulse is ready
-	call beep_f1
-	call beep_f1
-	setb	EA							; Enable all interrupts
-	call wait200ms	
+; HUGO : Skip beep
+;	; Beep arm sequence start signal
+;	clr 	EA							; Disable all interrupts
+;	call beep_f1						; Signal that RC pulse is ready
+;	call beep_f1
+;	call beep_f1
+;	setb	EA							; Enable all interrupts
+;	call wait200ms	
 
 	; Arming sequence start
 	mov	Gov_Arm_Target, #0		; Clear governor arm target
@@ -5117,11 +5135,14 @@ arming_start:
 	mov	A, @Temp1				
 	clr	C
 	subb	A, #1				; Is TX programming enabled?
-	jnc 	arming_initial_arm_check	; Yes - proceed
+
+	; HUGO: Skip program mode !
+	;jnc 	arming_initial_arm_check	; Yes - proceed
 
 	jmp	program_by_tx_checked	; No - branch
 
 arming_initial_arm_check:
+	
 	mov	A, Initial_Arm			; Yes - check if it is initial arm sequence
 	clr	C
 	subb	A, #1				; Is it the initial arm sequence?
@@ -5250,17 +5271,23 @@ arm_target_updated:
 	subb	A, #RCP_STOP			; Below stop?
 	jc	arm_end_beep			; Yes - proceed
 
-	jmp	arming_start			; No - start over
+	; HUGO: Run !
+	;jmp	arming_start			; No - start over
 
 arm_end_beep:
+
+	; Begin HUGO : No Beep !
 	; Beep arm sequence end signal
 	clr 	EA					; Disable all interrupts
 	call beep_f4				; Signal that rcpulse is ready
-	call beep_f4
-	call beep_f4
+	; WHY WHEN a remove this line, program don't work !
+	;call beep_f4
+	;call beep_f4
 	setb	EA					; Enable all interrupts
-	call wait200ms
-
+	;call wait200ms
+	;setb	EA					; Enable all interrupts
+	; End HUGO
+	
 	; Clear initial arm variable
 	mov	Initial_Arm, #0
 
@@ -5312,6 +5339,7 @@ beep_delay_set:
 	mov	Beep_Strength, @Temp1
 	call wait100ms				; Wait for new RC pulse to be measured
 
+	; HUGO: If a comment code below, motor turn little, stop, turn, stop, etc...
 wait_for_power_on_no_beep:
 	call wait3ms
 	mov	A, Rcp_Timeout_Cnt				; Load RC pulse timeout counter value
